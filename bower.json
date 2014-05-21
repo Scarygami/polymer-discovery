@@ -1,0 +1,19 @@
+{
+  "name": "polymer-discovery",
+  "version": "0.0.1",
+  "authors": [
+    "Scarygami <scarygami@gmail.com>"
+  ],
+  "license": "Apache 2.0",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "platform": "Polymer/platform#~0.2.4",
+    "core-ajax": "Polymer/core-ajax#~0.2.4"
+  }
+}

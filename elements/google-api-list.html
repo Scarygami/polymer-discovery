@@ -1,0 +1,73 @@
+<link rel="import" href="../bower_components/polymer/polymer.html">
+<link rel="import" href="../bower_components/core-ajax/core-ajax.html">
+<link rel="import" href="../elements/google-api-doc.html">
+
+<polymer-element name="google-api-list">
+  <template>
+    <style>
+      table { border-collapse: collapse; width: 100%; }
+      tr { vertical-align: top; }
+      td, th { padding: 5px; }
+      th { text-align: left; }
+      td { border-top: 1px solid black; border-bottom: 1px solid black; }
+
+      td.nobreak { width: 1px; white-space: nowrap; }
+
+      tr.summary { cursor: pointer; }
+      tr.summary.highlight { background-color: #FFC; font-weight:bold; }
+      tr.summary.highlight > td:first-child { border-left: 5px solid black; }
+
+      tr.doc > td:first-child { border-left: 5px solid black; }
+    </style>
+
+    <core-ajax url="https://www.googleapis.com/discovery/v1/apis"
+               auto
+               response="{{ data }}"
+               handleAs="json"></core-ajax>
+
+    Filter <input value="{{ search }}">
+
+    <table>
+      <tr><th>API</th><th>Version</th><th>Description</th><th>Documentation</th></tr>
+      <template repeat="{{ data.items as api }}">
+        <template if="{{ api | match(search) }}">
+          <tr class="summary{{ api.visible ? ' highlight' : '' }}" on-click="{{toggleDoc}}">
+            <td class="nobreak">{{ api.name }}</td>
+            <td class="nobreak">{{ api.version }}</td>
+            <td>{{ api.description }}</td>
+            <td>
+              <template if="{{ api.documentationLink }} ">
+                <a href="{{ api.documentationLink }}">Official Docs</a>
+              </template>
+            </td>
+          </tr>
+          <template if="{{ api.loaded }}">
+            <tr class="doc" style="display: {{ api.visible ? 'auto' : 'none' }};">
+              <td colspan="4">
+                <google-api-doc api="{{ api.name }}" version="{{ api.version }}"></google-api-doc>
+              </td>
+            </tr>
+          </template>
+        </template>
+      </template>
+    </table>
+  </template>
+
+  <script>
+    Polymer('google-api-list', {
+      "toggleDoc": function(e) {
+        var api = e.target.templateInstance.model.api;
+        if (api.loaded) {
+          api.visible = !api.visible;
+        } else {
+          api.loaded = true;
+          api.visible = true;
+        }
+      },
+      "match": function(api, term) {
+        var rx = new RegExp(term, "i");
+        return (api.name.search(rx) >= 0 || api.description.search(rx) >= 0)
+      }
+    });
+  </script>
+</polymer-element>

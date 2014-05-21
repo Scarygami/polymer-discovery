@@ -1,0 +1,18 @@
+<link rel="import" href="../bower_components/polymer/polymer.html">
+
+<polymer-element name="line-break-text" attributes="text">
+  <template>
+    <template repeat="{{ text | split as line }}">
+      {{ line }}<br>
+    </template>
+  </template>
+
+  <script>
+    Polymer('line-break-text', {
+      "text": "",
+      "split": function (input) {
+        return input.split("\n");
+      }
+    });
+  </script>
+</polymer-element>

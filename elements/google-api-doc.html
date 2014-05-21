@@ -1,0 +1,336 @@
+<link rel="import" href="../bower_components/polymer/polymer.html">
+<link rel="import" href="../bower_components/core-ajax/core-ajax.html">
+<link rel="import" href="../elements/line-break-text.html">
+
+<polymer-element name="google-api-doc" attributes="api version">
+  <template>
+    <style>
+      table { border-collapse: collapse; width: 100%; }
+      tr { vertical-align: top; }
+      table > thead > tr { vertical-align: bottom; }
+      td, th { padding: 5px; }
+      th { text-align: left; }
+      td { border-top: 1px solid black; border-bottom: 1px solid black; }
+
+      td.nobreak { width: 1px; white-space: nowrap; }
+
+      tr.summary { cursor: pointer; }
+      tr.summary.highlight { background-color: #FFC; font-weight:bold; }
+      tr.summary.highlight > td:first-child { border-left: 5px solid black; }
+
+      tr.method > td:first-child { border-left: 5px solid black; }
+
+      code { color: #007000; }
+    </style>
+
+    <core-ajax url="https://www.googleapis.com/discovery/v1/apis/{{api}}/{{version}}/rest/"
+               auto
+               response="{{ doc }}"
+               handleAs="json"></core-ajax>
+
+    <template if="{{ !doc }}">
+      Loading, please wait...
+    </template>
+
+    <template if="{{ doc }}">
+      <template if="{{ doc.auth && doc.auth.oauth2 && doc.auth.oauth2.scopes }}">
+        <table>
+          <tr>
+            <th>Scope</th>
+            <th>Description</th>
+          </tr>
+
+          <template repeat="{{ doc.auth.oauth2.scopes | arrify as scope }}">
+            <tr>
+              <td class="nobreak"><code>{{ scope.key }}</code></td>
+              <td>{{ scope.data.description }}</td>
+            </tr>
+          </template>
+        </table><br>
+      </template>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>Description</th>
+            <th>Path - <code>{{ doc.baseUrl }}</code></th>
+            <th>HTTP Method</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template bind="{{ {'prefix': '', 'data': doc} as resource }}" id="resource_methods">
+            <template repeat="{{ resource.data.methods | arrify as method }}">
+              <tr class="summary{{ method.visible ? ' highlight' : '' }}" on-click="{{ toggleMethod }}">
+                <td class="nobreak"><code>{{ resource.prefix }}{{ method.key }}</code></td>
+                <td><line-break-text text="{{ method.data.description }}"></line-break-text></td>
+                <td><code>{{ method.data.path }}</code></td>
+                <td>{{ method.data.httpMethod }}</td>
+              </tr>
+              <tr class="method" style="display: {{ method.visible ? 'auto' : 'none' }};">
+                <td colspan="4">
+                  <google-api-doc-method method="{{ method.data }}" doc="{{ doc }}"></google-api-doc-method>
+                </td>
+              </tr>
+            </template>
+
+            <template repeat="{{ resource.data.resources | arrify as subresource }}">
+              <template
+                ref="resource_methods"
+                bind="{{ {'prefix': resource.prefix + subresource.key + '.', 'data': subresource.data} as resource }}"></template>
+            </template>
+          </template>
+        </tbody>
+      </table><br>
+    </template>
+  </template>
+
+  <script>
+    Polymer('google-api-doc', {
+      "api": "discovery",
+      "version": "v1",
+      "toggleMethod": function (e) {
+        var method = e.target.templateInstance.model.method;
+        method.visible = !method.visible;
+      },
+      "arrify": function (object) {
+        var array = [], key;
+        for (key in object) {
+          if (object.hasOwnProperty(key)) {
+            array.push({
+              "key": key,
+              "data": object[key]
+            });
+          }
+        }
+        return array;
+      }
+    });
+  </script>
+</polymer-element>
+
+<polymer-element name="google-api-doc-method" attributes="method doc">
+  <template>
+    <style>
+
+      table { border-collapse: collapse; width: 100%; }
+      tr { vertical-align: top; }
+      td, th { padding: 5px; }
+      th { text-align: left; }
+      code { color: #007000; }
+
+      table.parameters { width: auto; }
+      table.parameters td, table.parameters th { border: 1px solid #BBB;}
+      tr.header { background-color: #DDF; }
+
+      .part {
+        display: inline-block;
+        vertical-align: top;
+        margin-bottom: 5px;
+      }
+    </style>
+
+    <template if="{{ method.parameters }}">
+      <div class="part">
+        <table class="parameters">
+          <tr class="header"><th colspan="5">Parameters</th></tr>
+          <tr><th>Name</th><th>Value</th><th>Description</th><th>Location</th><th>Required</th></tr>
+          <template repeat="{{ method.parameters | arrify | parameterSort as parameter }}">
+            <tr>
+              <td><code>{{ parameter.key }}</code></td>
+              <td><code>{{ parameter.data.type }}</code></td>
+              <td><line-break-text text="{{ parameter.data.description }}"></line-break-text></td>
+              <td>{{ parameter.data.location }}</td>
+              <td>{{ parameter.data.required ? "yes" : ""}}</td>
+            </tr>
+          </template>
+        </table>
+      </div>
+    </template>
+
+    <template if="{{ method.request }}">
+      <google-api-doc-schema
+        class="part"
+        header="{{ method.request.$ref != method.response.$ref ? 'Request Body' : 'Request Body & Response' }}"
+        schema="{{ method.request.$ref }}"
+        doc="{{ doc }}"></google-api-doc-schema>
+    </template>
+
+    <template if="{{ method.response && method.response.$ref != method.request.$ref }}">
+      <google-api-doc-schema
+        class="part"
+        header="Response"
+        schema="{{ method.response.$ref }}"
+        doc="{{ doc }}"></google-api-doc-schema>
+    </template>
+  </template>
+
+  <script>
+    Polymer('google-api-doc-method', {
+      "method": {},
+      "doc": {},
+      "arrify": function (object) {
+        var array = [], key;
+        for (key in object) {
+          if (object.hasOwnProperty(key)) {
+            array.push({
+              "key": key,
+              "data": object[key]
+            });
+          }
+        }
+        return array;
+      },
+      "parameterSort": function (array) {
+        array.sort(function (a, b) {
+          if (a.data.location !== b.data.location) {
+            return (a.data.location < b.data.location ? -1 : 1);
+          }
+          if (a.data.required !== b.data.required) {
+            return (a.data.required ? -1 : 1);
+          }
+          return 0;
+        });
+        return array;
+      }
+    });
+  </script>
+</polymer-element>
+
+<polymer-element name="google-api-doc-schema" attributes="schema doc header">
+  <template>
+    <style>
+      table { border-collapse: collapse; width: 100%; }
+      tr { vertical-align: top; }
+      td, th { padding: 5px; }
+      th { text-align: left; }
+      code { color: #007000; }
+
+      table.properties { width: auto; }
+      table.properties td, table.properties th { border: 1px solid #BBB;}
+      tr.header { background-color: #DDF; }
+      tr.header code { font-size: 1.2em;}
+      td.nobreak { width: 1px; white-space: nowrap; }
+
+      .grey { color: #999; }
+    </style>
+
+    <template bind="{{ doc.schemas[schema] as schemaDesc }}">
+      <table class="properties">
+        <tr class="header"><th colspan="3">{{ header }} - <code>{{ schema }}</code></th></tr>
+        <tr><th>Name</th><th>Value</th><th>Description</th></tr>
+        <template repeat="{{ schemaDesc.properties | arrify('', []) as property }}" id="schema_property">
+          <template if="{{ property.data.type }}">
+            <template if="{{ property.data.type == 'object' }}">
+              <tr>
+                <td class="nobreak">
+                  <code><span class="grey">{{ property.prefix }}</span>{{ property.key }}</code>
+                </td>
+                <td class="nobreak">
+                  <code>object</code>
+                </td>
+                <td>
+                  <line-break-text text="{{ property.data.description }}"></line-break-text>
+                </td>
+              </tr>
+              <template
+                ref="schema_property"
+                repeat="{{ property.data.properties | arrify(property.prefix + property.key + '.', property.parents) as property }}"
+              ></template>
+            </template>
+            <template if="{{ property.data.type == 'array' }}">
+              <tr>
+                <td class="nobreak">
+                  <code><span class="grey">{{ property.prefix }}</span>{{ property.key }}[]</code>
+                </td>
+                <td class="nobreak">
+                  <code>array of {{ property.data.items.type || property.data.items.$ref }}</code>
+                </td>
+                <td>
+                  <line-break-text text="{{ property.data.description }}"></line-break-text>
+                </td>
+              </tr>
+              <template if="{{ property.data.items.type == 'object' }}">
+                <template
+                  ref="schema_property"
+                  repeat="{{ property.data.items.properties | arrify(property.prefix + property.key + '[].', property.parents) as property }}"
+                ></template>
+              </template>
+              <template if="{{ property.data.items.$ref }}">
+                <template if="{{ property.data.items.$ref | check_parents(property.parents) }}">
+                  <template
+                    ref="schema_property"
+                    repeat="{{ doc.schemas[property.data.items.$ref].properties | arrify(property.prefix + property.key + '[].', property.parents, property.data.items.$ref) as property }}"
+                  ></template>
+                </template>
+              </template>
+            </template>
+            <template if="{{ property.data.type != 'object' && property.data.type != 'array' }}">
+              <tr>
+                <td class="nobreak">
+                  <code><span class="grey">{{ property.prefix }}</span>{{ property.key }}</code>
+                </td>
+                <td class="nobreak">
+                  <code>{{ property.data.type }}</code>
+                </td>
+                <td>
+                  <line-break-text text="{{ property.data.description }}"></line-break-text>
+                </td>
+              </tr>
+            </template>
+          </template>
+          <template if="{{ property.data.$ref }}">
+            <tr>
+              <td class="nobreak">
+                <code><span class="grey">{{ property.prefix }}</span>{{ property.key }}</code>
+              </td>
+              <td class="nobreak">
+                <code>{{ property.data.$ref }}</code>
+              </td>
+              <td>
+                <line-break-text text="{{ property.data.description }}"></line-break-text>
+              </td>
+            </tr>
+            <template if="{{ property.data.$ref | check_parents(property.parents) }}">
+              <template
+                ref="schema_property"
+                repeat="{{ doc.schemas[property.data.$ref].properties | arrify(property.prefix + property.key + '.', property.parents, property.data.$ref) as property }}"
+              ></template>
+            </template>
+          </template>
+        </template>
+      </table>
+    </template>
+  </template>
+
+  <script>
+    Polymer('google-api-doc-schema', {
+      "schema": {},
+      "doc": {},
+      "header": "Schema",
+      "arrify": function (object, prefix, parents, new_parent) {
+        var array = [], tmp;
+        if (!!new_parent) {
+          parents = (parents || []).concat([new_parent]);
+        }
+        for (key in object) {
+          if (object.hasOwnProperty(key)) {
+            array.push({
+              "key": key,
+              "data": object[key],
+              "prefix": prefix || "",
+              "parents": parents
+            });
+          }
+        }
+        return array;
+      },
+      "check_parents": function (item, parents) {
+        if (parents.indexOf(item) < 0) {
+          return true;
+        }
+        return false;
+      }
+    });
+  </script>
+</polymer-element>
