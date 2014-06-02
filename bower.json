@@ -1,5 +1,5 @@
 {
-  "name": "polymer-discovery",
+  "name": "doc",
   "version": "0.0.1",
   "authors": [
     "Scarygami <scarygami@gmail.com>"
@@ -13,7 +13,9 @@
     "tests"
   ],
   "dependencies": {
-    "platform": "Polymer/platform#~0.2.4",
-    "core-ajax": "Polymer/core-ajax#~0.2.4"
+    "platform": "Polymer/platform#master",
+    "core-ajax": "Polymer/core-ajax",
+    "google-apis": "PolymerLabs/google-apis",
+    "polymer-ui-toggle-button": "PolymerLabs/polymer-ui-toggle-button"
   }
 }

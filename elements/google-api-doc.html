@@ -1,10 +1,13 @@
 <link rel="import" href="../bower_components/polymer/polymer.html">
+<link rel="import" href="../bower_components/polymer-ui-toggle-button/polymer-ui-toggle-button.html">
 <link rel="import" href="../bower_components/core-ajax/core-ajax.html">
+<link rel="import" href="../bower_components/google-apis/google-apis.html">
 <link rel="import" href="../elements/line-break-text.html">
 
-<polymer-element name="google-api-doc" attributes="api version">
+<polymer-element name="google-api-doc" attributes="api version key clientId">
   <template>
     <style>
+      * { box-sizing: border-box; }
       table { border-collapse: collapse; width: 100%; }
       tr { vertical-align: top; }
       table > thead > tr { vertical-align: bottom; }
@@ -23,6 +26,8 @@
       code { color: #007000; }
     </style>
 
+    <google-client-api></google-client-api>
+
     <core-ajax url="https://www.googleapis.com/discovery/v1/apis/{{api}}/{{version}}/rest/"
                auto
                response="{{ doc }}"
@@ -33,20 +38,42 @@
     </template>
 
     <template if="{{ doc }}">
+
+      <div style="text-align: right;">
+        <polymer-ui-toggle-button
+          offCaption="Try it!"
+          onCaption="Try it!"
+          value="{{ explorer }}"></polymer-ui-toggle-button>
+      </div>
+
       <template if="{{ doc.auth && doc.auth.oauth2 && doc.auth.oauth2.scopes }}">
         <table>
           <tr>
+            <template if="{{ explorer }}">
+            <th></th>
+            </template>
             <th>Scope</th>
             <th>Description</th>
           </tr>
 
           <template repeat="{{ doc.auth.oauth2.scopes | arrify as scope }}">
             <tr>
+              <template if="{{ explorer }}">
+              <td class="nobreak"><input class="scope" type="checkbox" value="{{ scope.key }}" on-click="{{scopeCheck}}"></td>
+              </template>
               <td class="nobreak"><code>{{ scope.key }}</code></td>
               <td>{{ scope.data.description }}</td>
             </tr>
           </template>
-        </table><br>
+        </table>
+        <template if="{{ explorer }}">
+        <button id="authorizeButton" on-click="{{ authorize }}" style="display: none;">Authorize selected scopes</button>
+        <template if="{{accessToken}}">
+          Authenticated successfully <button on-click="{{ signOut }}">Log out</button>
+        </template>
+        <br>
+        </template>
+        <br>
       </template>
 
       <table>
@@ -69,7 +96,16 @@
               </tr>
               <tr class="method" style="display: {{ method.visible ? 'auto' : 'none' }};">
                 <td colspan="4">
-                  <google-api-doc-method method="{{ method.data }}" doc="{{ doc }}"></google-api-doc-method>
+                  <google-api-doc-method
+                    method="{{ method.data }}"
+                    doc="{{ doc }}"
+                    style="display: {{ explorer ? 'none' : 'auto' }};"></google-api-doc-method>
+                  <google-api-doc-method-explorer
+                    method="{{ method.data }}"
+                    doc="{{ doc }}"
+                    key="{{ key }}"
+                    accessToken="{{ accessToken }}"
+                    style="display: {{ explorer ? 'auto' : 'none' }};"></google-api-doc-method-explorer>
                 </td>
               </tr>
             </template>
@@ -86,33 +122,76 @@
   </template>
 
   <script>
-    Polymer('google-api-doc', {
-      "api": "discovery",
-      "version": "v1",
-      "toggleMethod": function (e) {
-        var method = e.target.templateInstance.model.method;
-        method.visible = !method.visible;
-      },
-      "arrify": function (object) {
-        var array = [], key;
-        for (key in object) {
-          if (object.hasOwnProperty(key)) {
-            array.push({
-              "key": key,
-              "data": object[key]
-            });
+    (function () {
+      var scopes = [];
+      var handler;
+      Polymer('google-api-doc', {
+        "api": "discovery",
+        "version": "v1",
+        "key": "",
+        "clientId": "",
+        "accessToken": null,
+        "toggleMethod": function (e) {
+          var method = e.target.templateInstance.model.method;
+          method.visible = !method.visible;
+        },
+        "scopeCheck": function () {
+          var checks = this.shadowRoot.querySelectorAll("input.scope"), i;
+          scopes = [];
+          for (i = 0; i < checks.length; i++) {
+            if (checks[i].checked) {
+              scopes.push(checks[i].value);
+            }
           }
+          if (scopes.length > 0) {
+            this.shadowRoot.getElementById("authorizeButton").scopes = scopes;
+            this.shadowRoot.getElementById("authorizeButton").style.display = "inline-block";
+          } else {
+            this.shadowRoot.getElementById("authorizeButton").style.display = "none";
+          }
+        },
+        "authorize": function () {
+          gapi.auth.authorize({
+            "client_id": this.clientId,
+            "scope": scopes,
+            "immediate": false
+          }, function (authResult) {
+            console.log(authResult);
+            if (authResult && !authResult.error) {
+              handler.accessToken = authResult.access_token;
+            } else {
+              handler.accessToken = null;
+            }
+          });
+        },
+        "signOut": function () {
+          gapi.auth.setToken(null);
+          handler.accessToken = null;
+        },
+        "arrify": function (object) {
+          var array = [], key;
+          for (key in object) {
+            if (object.hasOwnProperty(key)) {
+              array.push({
+                "key": key,
+                "data": object[key]
+              });
+            }
+          }
+          return array;
+        },
+        "attached": function () {
+          handler = this;
         }
-        return array;
-      }
-    });
+      });
+    }());
   </script>
 </polymer-element>
 
 <polymer-element name="google-api-doc-method" attributes="method doc">
   <template>
     <style>
-
+      * { box-sizing: border-box; }
       table { border-collapse: collapse; width: 100%; }
       tr { vertical-align: top; }
       td, th { padding: 5px; }
@@ -169,6 +248,7 @@
     Polymer('google-api-doc-method', {
       "method": {},
       "doc": {},
+      "key": "",
       "arrify": function (object) {
         var array = [], key;
         for (key in object) {
@@ -197,9 +277,156 @@
   </script>
 </polymer-element>
 
+<polymer-element name="google-api-doc-method-explorer" attributes="method doc key accessToken">
+  <template>
+    <style>
+      * { box-sizing: border-box; }
+      table { border-collapse: collapse; width: 100%; }
+      tr { vertical-align: top; }
+      td, th { padding: 5px; }
+      th { text-align: left; }
+      code { color: #007000; }
+
+      table.parameters { width: auto; }
+      table.parameters td, table.parameters th { border: 1px solid #BBB;}
+      tr.header { background-color: #DDF; }
+
+      .part {
+        display: inline-block;
+        vertical-align: top;
+        margin-bottom: 5px;
+      }
+
+      pre {
+        white-space: pre-wrap;
+      }
+    </style>
+
+    <template if="{{ method.parameters }}">
+      <div class="part">
+        <table class="parameters">
+          <tr class="header"><th colspan="5">Parameters</th></tr>
+          <tr><th>Name</th><th>Value</th><th>Type</th><th>Description</th><th>Required</th></tr>
+          <template repeat="{{ parameter, p in method.parameters | arrify | parameterSort }}">
+            <tr>
+              <td><code>{{ parameter.key }}</code></td>
+              <td><input value="{{ method.parameters[parameter.key].value }}"></td>
+              <td><code>{{ parameter.data.type }}</code></td>
+              <td><line-break-text text="{{ parameter.data.description }}"></line-break-text></td>
+              <td>{{ parameter.data.required ? "yes" : ""}}</td>
+            </tr>
+          </template>
+        </table>
+      </div>
+    </template>
+    <br>
+    <template if="{{accessToken}}">
+    <code>{{ doc.baseUrl }}{{ method | create_url(false) }}</code> <button on-click="{{ go }}">GO</button><br>
+    <core-ajax id="makeRequest"
+               url="{{ doc.baseUrl }}{{ method | create_url(false) }}"
+               method="{{ method.httpMethod }}"
+               headers='{"Authorization": "Bearer {{accessToken}}"}'
+               response="{{ response }}"
+               handleAs="json"
+               on-core-error="{{ handleError }}"></core-ajax>
+    </template>
+    <template if="{{!accessToken}}">
+    <code>{{ doc.baseUrl }}{{ method | create_url(true, false) }}</code> <button on-click="{{ go }}">GO</button><br>
+    <core-ajax id="makeRequest"
+               url="{{ doc.baseUrl }}{{ method | create_url(true, true) }}"
+               method="{{ method.httpMethod }}"
+               response="{{ response }}"
+               handleAs="json"
+               on-core-error="{{ handleError }}"></core-ajax>
+    </template>
+    <template if="{{ response }}">
+      <google-api-doc-schema-viewer
+        class="part"
+        header="Response"
+        schema="{{ method.response.$ref }}"
+        doc="{{ doc }}"
+        data="{{ response }}"></google-api-doc-schema-viewer>
+    </template>
+    <template if="{{ error && !response }}">
+      <b>Error:</b>
+      <pre>{{ error | stringify }}</pre>
+    </template>
+  </template>
+
+  <script>
+    Polymer('google-api-doc-method-explorer', {
+      "method": {},
+      "doc": {},
+      "error": null,
+      "response": null,
+      "handleError": function (e) {
+        this.response = null;
+        this.error = JSON.parse(e.detail.xhr.responseText);
+      },
+      "create_url": function (method, useKey, showKey) {
+        var url = method.path;
+        var query = [];
+        for (p in method.parameters) {
+          if (method.parameters.hasOwnProperty(p)) {
+            if (method.parameters[p].value) {
+              if (method.parameters[p].location === "path") {
+                url = url.replace("{" + p + "}", encodeURIComponent(method.parameters[p].value));
+              } else {
+                query.push(p + "=" + encodeURIComponent(method.parameters[p].value));
+              }
+            }
+          }
+        }
+        if (useKey) {
+          if (showKey && this.key) {
+            query.push("key=" + encodeURIComponent(this.key));  
+          } else {
+            query.push("key=YOUR_API_KEY");
+          }
+        }
+        if (query.length > 0) {
+          url += "?" + query.join("&");
+        }
+        return url;
+      },
+      "go": function () {
+        this.shadowRoot.getElementById("makeRequest").go();
+      },
+      "arrify": function (object) {
+        var array = [], key;
+        for (key in object) {
+          if (object.hasOwnProperty(key)) {
+            array.push({
+              "key": key,
+              "data": object[key]
+            });
+          }
+        }
+        return array;
+      },
+      "stringify": function (object) {
+        return JSON.stringify(object, undefined, 2);
+      },
+      "parameterSort": function (array) {
+        array.sort(function (a, b) {
+          if (a.data.location !== b.data.location) {
+            return (a.data.location < b.data.location ? -1 : 1);
+          }
+          if (a.data.required !== b.data.required) {
+            return (a.data.required ? -1 : 1);
+          }
+          return 0;
+        });
+        return array;
+      }
+    });
+  </script>
+</polymer-element>
+
 <polymer-element name="google-api-doc-schema" attributes="schema doc header">
   <template>
     <style>
+      * { box-sizing: border-box; }
       table { border-collapse: collapse; width: 100%; }
       tr { vertical-align: top; }
       td, th { padding: 5px; }
@@ -330,6 +557,146 @@
           return true;
         }
         return false;
+      }
+    });
+  </script>
+</polymer-element>
+
+
+<polymer-element name="google-api-doc-schema-viewer" attributes="schema doc header data">
+  <template>
+    <style>
+      * { box-sizing: border-box; }
+      table { border-collapse: collapse; width: 100%; }
+      tr { vertical-align: top; }
+      td, th { padding: 5px; }
+      th { text-align: left; }
+      code { color: #007000; }
+
+      table.properties { width: auto; max-width: 100%; }
+      table.properties td, table.properties th { border: 1px solid #BBB; }
+      tr.header { background-color: #DDF; }
+      tr.header code { font-size: 1.2em;}
+      td.nobreak { width: 1px; white-space: nowrap; }
+
+      .grey { color: #999; }
+
+      td.value {
+        max-width: 500px;
+        word-wrap: break-word;
+      }
+    </style>
+
+    <template bind="{{ doc.schemas[schema] as schemaDesc }}">
+      <table class="properties">
+        <tr class="header"><th colspan="3">{{ header }} - <code>{{ schema }}</code></th></tr>
+        <tr><th>Name</th><th>Value</th><th>Description</th></tr>
+        <template bind="{{ data as data }}">
+        <template repeat="{{ schemaDesc.properties | arrify('', []) as property }}" id="schema_property">
+          <template bind="{{ data[property.key] as data }}">
+            <template if="{{ data }}">
+              <template if="{{ property.data.type }}">
+                <template if="{{ property.data.type == 'object' }}">
+                  <tr>
+                    <td class="nobreak">
+                      <code><span class="grey">{{ property.prefix }}</span>{{ property.key }}</code>
+                    </td>
+                    <td><code class="grey">[object]</code></td>
+                    <td>
+                      <line-break-text text="{{ property.data.description }}"></line-break-text>
+                    </td>
+                  </tr>
+                  <template
+                    ref="schema_property"
+                    repeat="{{ property.data.properties | arrify(property.prefix + property.key + '.', property.parents) as property }}"
+                  ></template>
+                </template>
+                <template if="{{ property.data.type == 'array' }}">
+                  <tr>
+                    <td class="nobreak">
+                      <code><span class="grey">{{ property.prefix }}</span>{{ property.key }}[]</code>
+                    </td>
+                    <td class="nobreak">
+                      <code class="grey">[array of {{ property.data.items.type || property.data.items.$ref }}]</code>
+                    </td>
+                    <td>
+                      <line-break-text text="{{ property.data.description }}"></line-break-text>
+                    </td>
+                  </tr>
+                  <template repeat="{{ data, i in data }}">
+                    <template if="{{ property.data.items.type == 'object' }}">
+                      <template
+                        ref="schema_property"
+                        repeat="{{ property.data.items.properties | arrify(property.prefix + property.key + '[' + i + '].', property.parents) as property }}"
+                      ></template>
+                    </template>
+                    <template if="{{ property.data.items.$ref }}">
+                      <template
+                        ref="schema_property"
+                        repeat="{{ doc.schemas[property.data.items.$ref].properties | arrify(property.prefix + property.key + '[' + i + '].', property.parents, property.data.items.$ref) as property }}"
+                      ></template>
+                    </template>
+                  </template>
+                </template>
+                <template if="{{ property.data.type != 'object' && property.data.type != 'array' }}">
+                  <tr>
+                    <td class="nobreak">
+                      <code><span class="grey">{{ property.prefix }}</span>{{ property.key }}</code>
+                    </td>
+                    <td class="value"><code>{{ data }}</code></td>
+                    <td>
+                      <code class="grey">[{{ property.data.type }}]</code>
+                      <line-break-text text="{{ property.data.description }}"></line-break-text>
+                    </td>
+                  </tr>
+                </template>
+              </template>
+              <template if="{{ property.data.$ref }}">
+                <tr>
+                  <td class="nobreak">
+                    <code><span class="grey">{{ property.prefix }}</span>{{ property.key }}</code>
+                  </td>
+                  <td class="nobreak">
+                    <code class="grey">[{{ property.data.$ref }}]</code>
+                  </td>
+                  <td>
+                    <line-break-text text="{{ property.data.description }}"></line-break-text>
+                  </td>
+                </tr>
+                <template
+                  ref="schema_property"
+                  repeat="{{ doc.schemas[property.data.$ref].properties | arrify(property.prefix + property.key + '.', property.parents, property.data.$ref) as property }}"
+                ></template>
+              </template>
+            </template>
+          </template>
+        </template>
+        </template>
+      </table>
+    </template>
+  </template>
+
+  <script>
+    Polymer('google-api-doc-schema-viewer', {
+      "schema": {},
+      "doc": {},
+      "header": "Schema",
+      "arrify": function (object, prefix, parents, new_parent) {
+        var array = [], tmp;
+        if (!!new_parent) {
+          parents = (parents || []).concat([new_parent]);
+        }
+        for (key in object) {
+          if (object.hasOwnProperty(key)) {
+            array.push({
+              "key": key,
+              "data": object[key],
+              "prefix": prefix || "",
+              "parents": parents
+            });
+          }
+        }
+        return array;
       }
     });
   </script>

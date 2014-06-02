@@ -2,9 +2,10 @@
 <link rel="import" href="../bower_components/core-ajax/core-ajax.html">
 <link rel="import" href="../elements/google-api-doc.html">
 
-<polymer-element name="google-api-list">
+<polymer-element name="google-api-list" attributes="key clientId">
   <template>
     <style>
+      * { box-sizing: border-box; }
       table { border-collapse: collapse; width: 100%; }
       tr { vertical-align: top; }
       td, th { padding: 5px; }
@@ -44,7 +45,11 @@
           <template if="{{ api.loaded }}">
             <tr class="doc" style="display: {{ api.visible ? 'auto' : 'none' }};">
               <td colspan="4">
-                <google-api-doc api="{{ api.name }}" version="{{ api.version }}"></google-api-doc>
+                <google-api-doc
+                  api="{{ api.name }}"
+                  version="{{ api.version }}"
+                  key="{{ key }}"
+                  clientId="{{ clientId }}"></google-api-doc>
               </td>
             </tr>
           </template>
